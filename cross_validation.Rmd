@@ -41,7 +41,7 @@ set.seed(1)
 nonlin_df = 
   tibble(
     id = 1:100,
-    x = runif(100, 0, 1),
+    x = runif(100, 0, 1), #uniform distribution
     y = 1 - 10 * (x - .3) ^ 2 + rnorm(100, 0, 0.3)
   )
 
@@ -54,7 +54,7 @@ Do the train / test split.
 
 ```{r}
 train_df = sample_n(nonlin_df, 80)
-test_df = anti_join(nonlin_df, train_df, by = "id")
+test_df = anti_join(nonlin_df, train_df, by = "id") #anti: not in the two dataset
 ```
 
 ```{r}
@@ -67,7 +67,7 @@ train_df |>
 
 ```{r}
 linear_mod = lm(y ~ x, data = train_df)
-smooth_mod = mgcv::gam(y ~ s(x), data = train_df)
+smooth_mod = mgcv::gam(y ~ s(x), data = train_df) #smooth model 
 wiggly_mod = mgcv::gam(y ~ s(x, k = 30), sp = 10e-6, data = train_df)
 ```
 
@@ -76,7 +76,7 @@ quick visualization of the linear model
 
 ```{r}
 train_df |> 
-  modelr::add_predictions(wiggly_mod) |> 
+  modelr::add_predictions(smooth_mod) |> 
   ggplot(aes(x = x, y = y)) + 
   geom_point() + 
   geom_line(aes(y = pred))
@@ -84,6 +84,7 @@ train_df |>
 
 
 RMSEs on training data can be misleading ...
+root mean square error
 
 ```{r}
 rmse(linear_mod, train_df)
@@ -100,7 +101,7 @@ rmse(wiggly_mod, test_df)
 ```
 
 
-## Use modelr for CV
+## Use modelr for CV (cross validation)
 
 
 ```{r}
@@ -119,16 +120,22 @@ cv_df |> pull(train) |> nth(3) |> as_tibble()
 ```
 
 Apply each model to all training datasets, and evaluate on all testing datasets.
+```{r}
+lin_mod_funct= function(df) {
+  lm(y~x, data=df)
+}
+```
+
 
 ```{r}
 cv_results =
   cv_df |> 
   mutate(
-    linear_fit = map(train, \(df) lm(y ~ x, data = df)),
+    linear_fit = map(train, \(df) lm(y ~ x, data = df)), # can replace it as lin_mod_function, same thing
     smooth_fit = map(train, \(df) mgcv::gam(y ~ s(x), data = df)),
     wiggly_fit = map(train, \(df) mgcv::gam(y ~ s(x, k = 30), sp = 10e-6, data = df))
   ) |> 
-  mutate(
+  mutate( #2 column to map across, format it as map2_dbl as one number
     rmse_linear = map2_dbl(linear_fit, test, \(mod, df) rmse(mod, df)),
     rmse_smooth = map2_dbl(smooth_fit, test, \(mod, df) rmse(mod, df)),
     rmse_wiggly = map2_dbl(wiggly_fit, test, \(mod, df) rmse(mod, df))
